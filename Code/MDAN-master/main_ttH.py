@@ -28,10 +28,10 @@ parser.add_argument("-m", "--model", help="Choose a model to train: [mdan]",
 parser.add_argument("-d", "--dimension", help="Number of features to be used in the experiment",
                     type=int, default=48)
 parser.add_argument("-u", "--mu", help="Hyperparameter of the coefficient for the domain adversarial loss",
-                    type=float, default=1e-2)
+                    type=float, default=0.5)
 parser.add_argument("-e", "--epoch", help="Number of training epochs", type=int, default=15)
 parser.add_argument("-b", "--batch_size", help="Batch size during training", type=int, default=1000)
-parser.add_argument("-o", "--mode", help="Mode of combination rule for MDANet: [maxmin|dynamic]", type=str, default="dynamic")
+parser.add_argument("-o", "--mode", help="Mode of combination rule for MDANet: [maxmin|dynamic]", type=str, default="maxmin")
 # Compile and configure all the model parameters.
 args = parser.parse_args()
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -74,7 +74,7 @@ logger.info("-" * 100)
 
 if args.model == "mdan":
     configs = {"input_dim": input_dim, "hidden_layers": [25, 15, 6], "num_classes": 2,
-               "num_epochs": args.epoch, "batch_size": args.batch_size, "lr": 2*1e-2, "mu": args.mu, "num_domains":
+               "num_epochs": args.epoch, "batch_size": args.batch_size, "lr": 1e-1, "mu": args.mu, "num_domains":
                    num_data_sets - 1, "mode": args.mode, "gamma": 10.0, "verbose": args.verbose}
     num_epochs = configs["num_epochs"]
     batch_size = configs["batch_size"]
@@ -104,6 +104,16 @@ if args.model == "mdan":
         # Train DannNet.
         mdan = MDANet(configs).to(device)
         optimizer = optim.Adadelta(mdan.parameters(), lr=lr)
+
+        mdan.eval()
+        target_insts = torch.tensor(target_insts, requires_grad=False).to(device)
+        target_labels = torch.tensor(target_labels)
+        preds_labels = torch.max(mdan.inference(target_insts), 1)[1].cpu().data.squeeze_()
+        pred_acc = torch.sum(preds_labels == target_labels).item() / float(target_insts.size(0))
+        target_insts = target_insts.cpu().numpy()
+        target_labels = target_labels.cpu().numpy()
+        print("accuracy before training: ", pred_acc)
+
         mdan.train()
         # Training phase.
         time_start = time.time()
@@ -130,6 +140,7 @@ if args.model == "mdan":
                 # Different final loss function depending on different training modes.
                 if mode == "maxmin":
                     loss = torch.max(losses) + mu * torch.min(domain_losses)
+                    #what it does actually is: loss = losses[0] + mu * domain_losses[0]
                 elif mode == "dynamic":
                     loss = torch.log(torch.sum(torch.exp(gamma * (losses + mu * domain_losses)))) / gamma
                 else:
@@ -159,6 +170,7 @@ if args.model == "mdan":
         target_insts = torch.tensor(target_insts, requires_grad=False).to(device)
         target_labels = torch.tensor(target_labels)
         preds_labels = torch.max(mdan.inference(target_insts), 1)[1].cpu().data.squeeze_()
+        pred_scores = torch.exp(mdan.inference(target_insts)).to(device)[:,1]
         pred_acc = torch.sum(preds_labels == target_labels).item() / float(target_insts.size(0))
         error_dicts[data_name[i]] = preds_labels.numpy() != target_labels.numpy()
         logger.info("Prediction accuracy on {} = {}, time used = {} seconds.".
@@ -168,6 +180,9 @@ if args.model == "mdan":
     logger.info(results)
     pickle.dump(error_dicts, open("{}-{}-{}-{}.pkl".format(args.name, args.frac, args.model, args.mode), "wb"))
     pickle.dump(train_val_loss_dict, open("train_val_loss_dict-{}-{}-{}-{}.pkl".format(args.name, args.frac, args.model, args.mode), "wb"))
+    with open("pred_scores-{}-{}-{}-{}.pkl".format(args.name, args.frac, args.model, args.mode), "wb")as file_pred_scores:
+      pickle.dump(pred_scores.detach().cpu().numpy(), file_pred_scores)
+      pickle.dump(target_labels.detach().cpu().numpy(), file_pred_scores)
     logger.info("*" * 100)
     
 
