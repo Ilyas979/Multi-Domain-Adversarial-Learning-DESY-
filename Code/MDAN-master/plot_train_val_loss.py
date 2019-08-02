@@ -19,6 +19,7 @@ for key, values in train_val_loss_dict.items():
   if key != 'clf_losses_val':  
     plt.plot(values, label=key)
 plt.legend()
+plt.savefig("../../Plots/train_val_loss_plot")
 plt.show()
 """
 plt.plot(train_val_loss_dict['clf_losses'], label='clf_losses')
