@@ -23,14 +23,14 @@ print(ttH_np.shape, ttbar_np.shape, ttbb_np.shape)
 np.random.shuffle(ttH_np)
 np.random.shuffle(ttbar_np)
 np.random.shuffle(ttbb_np)
-ratio = 4
-N_events=90000//ratio*3
 
-src = coo_matrix(StandardScaler().fit_transform(np.concatenate((ttH_np[:N_events], ttbar_np[:ratio*N_events])))).tocsc()
-y_src = np.concatenate((np.ones(N_events),np.zeros(ratio*N_events)))
+N_ttH_events = 100000
+N_bkg_events = 200000
+src = coo_matrix(StandardScaler().fit_transform(np.concatenate((ttH_np[:N_ttH_events], ttbar_np[:N_bkg_events])))).tocsc()
+y_src = np.concatenate((np.ones(N_ttH_events),np.zeros(N_bkg_events)))
 
-target = coo_matrix(StandardScaler().fit_transform(np.concatenate((ttH_np[N_events:2*N_events], ttbb_np[:ratio*N_events])))).tocsc()
-y_target = np.concatenate((np.ones(N_events),np.zeros(ratio*N_events)))
+target = coo_matrix(StandardScaler().fit_transform(np.concatenate((ttH_np[N_ttH_events:2*N_ttH_events], ttbb_np[:N_bkg_events])))).tocsc()
+y_target = np.concatenate((np.ones(N_ttH_events),np.zeros(N_bkg_events)))
 
 
 
@@ -59,8 +59,8 @@ with open('../Data/data_src_vs_trg', 'wb') as f:
 
 print("Data is saved to 'data_src_vs_trg' in pickle format")
 ############
-src1 = coo_matrix(StandardScaler().fit_transform(np.concatenate((ttH_np[N_events:2*N_events], ttbar_np[ratio*N_events:2*ratio*N_events])))).tocsc()
-y_src1 = np.concatenate((np.ones(N_events),np.zeros(ratio*N_events)))
+src1 = coo_matrix(StandardScaler().fit_transform(np.concatenate((ttH_np[N_ttH_events:2*N_ttH_events], ttbar_np[N_bkg_events:2*N_bkg_events])))).tocsc()
+y_src1 = np.concatenate((np.ones(N_ttH_events),np.zeros(N_bkg_events)))
 
 data_insts, data_labels, num_insts = [], [], []
 data_name = ['src', 'src1']
@@ -89,8 +89,8 @@ with open('../Data/data_src_vs_src1', 'wb') as f:
 print("Data is saved to 'data_src_vs_src1' in pickle format")
 
 ############
-target1 = coo_matrix(StandardScaler().fit_transform(np.concatenate((ttH_np[:N_events], ttbb_np[ratio*N_events:2*ratio*N_events])))).tocsc()
-y_target1 = np.concatenate((np.ones(N_events),np.zeros(ratio*N_events)))
+target1 = coo_matrix(StandardScaler().fit_transform(np.concatenate((ttH_np[:N_ttH_events], ttbb_np[N_bkg_events:2*N_bkg_events])))).tocsc()
+y_target1 = np.concatenate((np.ones(N_ttH_events),np.zeros(N_bkg_events)))
 
 data_insts, data_labels, num_insts = [], [], []
 data_name = ['target', 'target1']
