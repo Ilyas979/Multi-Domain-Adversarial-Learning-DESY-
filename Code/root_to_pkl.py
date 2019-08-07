@@ -24,14 +24,15 @@ np.random.shuffle(ttH_np)
 np.random.shuffle(ttbar_np)
 np.random.shuffle(ttbb_np)
 
-N_ttH_events = 100000
-N_bkg_events = 200000
+N_ttH_events = 500000
+N_bkg_events = 500000
 src = coo_matrix(StandardScaler().fit_transform(np.concatenate((ttH_np[:N_ttH_events], ttbar_np[:N_bkg_events])))).tocsc()
 y_src = np.concatenate((np.ones(N_ttH_events),np.zeros(N_bkg_events)))
 
 target = coo_matrix(StandardScaler().fit_transform(np.concatenate((ttH_np[N_ttH_events:2*N_ttH_events], ttbb_np[:N_bkg_events])))).tocsc()
 y_target = np.concatenate((np.ones(N_ttH_events),np.zeros(N_bkg_events)))
-
+#target = coo_matrix(StandardScaler().fit_transform(np.concatenate((ttbb_np[N_ttH_events:2*N_ttH_events], ttbb_np[:N_bkg_events])))).tocsc()
+#y_target = np.concatenate((np.zeros(N_ttH_events),np.zeros(N_bkg_events)))
 
 
 data_insts, data_labels, num_insts = [], [], []
@@ -59,6 +60,7 @@ with open('../Data/data_src_vs_trg', 'wb') as f:
 
 print("Data is saved to 'data_src_vs_trg' in pickle format")
 ############
+'''
 src1 = coo_matrix(StandardScaler().fit_transform(np.concatenate((ttH_np[N_ttH_events:2*N_ttH_events], ttbar_np[N_bkg_events:2*N_bkg_events])))).tocsc()
 y_src1 = np.concatenate((np.ones(N_ttH_events),np.zeros(N_bkg_events)))
 
@@ -117,4 +119,4 @@ with open('../Data/data_trg_vs_trg1', 'wb') as f:
     pickle.dump(data_name, f)
 
 print("Data is saved to 'data_trg_vs_trg1' in pickle format")
-
+'''

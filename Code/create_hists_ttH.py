@@ -19,23 +19,17 @@ feature_names = ttbar_df.columns
 
 for feat_name, i in zip(feature_names, range(len(feature_names))):
   for inst, label, src_name in zip(data_insts, data_labels, data_name):
-    a = inst.toarray()[:,i][label.reshape(-1) == 1]
-    b = inst.toarray()[:,i][label.reshape(-1) == 0]
     if src_name == 'src':
-      bins = np.histogram(np.hstack((a,b)), bins=40)[1]
-      plt.hist(a, bins, alpha=0.5, label='sgnl', density = True)
-      plt.hist(b, bins, alpha=0.5, label='bkg', density = True)
-      x_lim = plt.xlim()
-      y_lim = plt.ylim()
-      l = list(y_lim)
-      l[1] *= 1.1
-      y_lim = tuple(l)
-    else:
-      plt.hist(a, bins, alpha=0.5, label='sgnl', density = True)
-      plt.hist(b, bins, alpha=0.5, label='bkg', density = True)
-    plt.xlim(x_lim)
-    plt.ylim(y_lim)
-    plt.legend(loc='upper right')
-    plt.title(feat_name + ", " + src_name)
-    plt.savefig("../Plots/Histograms/"+feat_name+ "_" + src_name)
-    plt.close()
+      b1 = inst.toarray()[:,i][label.reshape(-1) == 0]
+      #plt.hist(a, bins, alpha=0.5, label='sgnl', density = True)
+    elif src_name == 'target':
+      a = inst.toarray()[:,i][label.reshape(-1) == 1]
+      b2 = inst.toarray()[:,i][label.reshape(-1) == 0]
+      bins = np.histogram(np.hstack((a,b1,b2)), bins=40)[1]
+      plt.hist(a, bins, alpha=0.5, label='sgnl', density = True, color = '#1f77b4')
+      plt.hist(b1, bins, alpha=0.5, label='bkg_1', density = True, color = '#ff7f0e')
+      plt.hist(b2, bins, alpha=0.5, label='bkg_2', density = True, color = '#2ca02c')
+      plt.legend(loc='upper right')
+      plt.title(feat_name)
+      plt.savefig("../Plots/Histograms/Bkgs_sgnl_together/"+feat_name)
+      plt.close()
