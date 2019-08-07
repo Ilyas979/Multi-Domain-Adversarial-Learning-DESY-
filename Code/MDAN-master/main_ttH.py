@@ -26,7 +26,7 @@ parser.add_argument("-m", "--model", help="Choose a model to train: [mdan]",
                     type=str, default="mdan")
 # The experimental setting of using 48 dimensions of features is according to the papers in the literature.
 parser.add_argument("-d", "--dimension", help="Number of features to be used in the experiment",
-                    type=int, default=48)
+                    type=int, default=44)
 parser.add_argument("-u", "--mu", help="Hyperparameter of the coefficient for the domain adversarial loss",
                     type=float, default=0.5)
 parser.add_argument("-e", "--epoch", help="Number of training epochs", type=int, default=15)
@@ -35,6 +35,8 @@ parser.add_argument("-o", "--mode", help="Mode of combination rule for MDANet: [
 # Compile and configure all the model parameters.
 args = parser.parse_args()
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+device = torch.device("cpu")
 
 logger = get_logger(args.name)
 
@@ -47,7 +49,7 @@ torch.manual_seed(args.seed)
 #maybe suffle first
 num_data_sets = 2
 num_insts = []
-data_from = 'data_src_vs_src1'
+data_from = 'data_src_vs_trg'
 #options: 'data_src_vs_src1' data_trg_vs_trg1 data_src_vs_trg
 
 if num_data_sets == 3:
@@ -73,7 +75,7 @@ logger.info("Training fraction = {}, number of actual training data instances = 
 logger.info("-" * 100)
 
 if args.model == "mdan":
-    configs = {"input_dim": input_dim, "hidden_layers": [25, 15, 6], "num_classes": 2,
+    configs = {"input_dim": input_dim, "hidden_layers": [100, 2, 2], "num_classes": 2,
                "num_epochs": args.epoch, "batch_size": args.batch_size, "lr": 1e-1, "mu": args.mu, "num_domains":
                    num_data_sets - 1, "mode": args.mode, "gamma": 10.0, "verbose": args.verbose}
     num_epochs = configs["num_epochs"]
@@ -99,13 +101,23 @@ if args.model == "mdan":
                 source_labels.append(data_labels[j][:num_trains, :].ravel().astype(np.int64))
         # Build target instances.
         target_idx = i
-        target_insts = data_insts[i][num_trains:, :].todense().astype(np.float32)
-        target_labels = data_labels[i][num_trains:, :].ravel().astype(np.int64)
+        target_insts = data_insts[i][:num_trains, :].todense().astype(np.float32)
+        target_labels = data_labels[i][:num_trains, :].ravel().astype(np.int64)
+
+        test_target_insts = data_insts[i][num_trains:, :].todense().astype(np.float32)
+        test_target_labels = data_labels[i][num_trains:, :].ravel().astype(np.int64)
+        test_target_insts = torch.tensor(test_target_insts, requires_grad=False).to(device)
+        test_target_labels = torch.tensor(test_target_labels).to(device)
+
         # Train DannNet.
         mdan = MDANet(configs).to(device)
         optimizer = optim.Adadelta(mdan.parameters(), lr=lr)
 
         mdan.eval()
+        
+        target_logprobs = mdan.inference(test_target_insts)
+        train_val_loss_dict['clf_losses_val'].append(F.nll_loss(target_logprobs, test_target_labels))
+
         target_insts = torch.tensor(target_insts, requires_grad=False).to(device)
         target_labels = torch.tensor(target_labels)
         preds_labels = torch.max(mdan.inference(target_insts), 1)[1].cpu().data.squeeze_()
@@ -113,6 +125,7 @@ if args.model == "mdan":
         target_insts = target_insts.cpu().numpy()
         target_labels = target_labels.cpu().numpy()
         print("accuracy before training: ", pred_acc)
+        target_insts_from_bkg = target_insts[target_labels == 0,:]
 
         mdan.train()
         # Training phase.
@@ -121,18 +134,21 @@ if args.model == "mdan":
             running_loss, sum_in_epoch_losses, sum_in_epoch_domain_losses = 0.0, 0.0, 0.0
             train_loader = multi_data_loader(source_insts, source_labels, batch_size)
             for xs, ys in train_loader:
-                #These are labels of being in a particular source
-                slabels = torch.ones(batch_size, requires_grad=False).type(torch.LongTensor).to(device)
-                tlabels = torch.zeros(batch_size, requires_grad=False).type(torch.LongTensor).to(device)
+                #These 'tlabels' are labels of being in a particular source. One's means that it is source, Zeros that it is target.
+                bkg_in_batch_size = list(ys[0]).count(0)
+                #print("bkg in source!!!: ", bkg_in_batch_size)
+                slabels = torch.ones(bkg_in_batch_size, requires_grad=False).type(torch.LongTensor).to(device)
+                tlabels = torch.zeros(bkg_in_batch_size, requires_grad=False).type(torch.LongTensor).to(device)
+                #These 'ys' are labels of being in a particular class, i.e. signal or background
                 for j in range(num_domains):
                     xs[j] = torch.tensor(xs[j], requires_grad=False).to(device)
                     ys[j] = torch.tensor(ys[j], requires_grad=False).to(device)
                 #tinputs = target_insts[ridx, :]
-                ridx = np.random.choice(target_insts.shape[0], batch_size)
-                tinputs = target_insts[ridx, :]
+                ridx = np.random.choice(target_insts_from_bkg.shape[0], bkg_in_batch_size)
+                tinputs = target_insts_from_bkg[ridx, :]
                 tinputs = torch.tensor(tinputs, requires_grad=False).to(device)
                 optimizer.zero_grad()
-                logprobs, sdomains, tdomains = mdan(xs, tinputs) #this line only evals probs of being a signal and belonging to a particular source given a current weights of NN
+                logprobs, sdomains, tdomains = mdan(xs, tinputs, ys) #this line only evals probs of being a signal and belonging to a particular source given a current weights of NN
                 # Compute prediction accuracy on multiple training sources.
                 losses = torch.stack([F.nll_loss(logprobs[j], ys[j]) for j in range(num_domains)])
                 domain_losses = torch.stack([F.nll_loss(sdomains[j], slabels) +
@@ -150,39 +166,48 @@ if args.model == "mdan":
                 sum_in_epoch_domain_losses += domain_losses
                 loss.backward()
                 optimizer.step()
+
             train_val_loss_dict['clf_losses'].append(sum_in_epoch_losses)
             train_val_loss_dict['discr_losses'].append(mu*sum_in_epoch_domain_losses)
             train_val_loss_dict['total_loss_in_epoch'].append(running_loss)
+            
             # Evaluate the loss on target domain
             mdan.eval()
-            target_insts = torch.tensor(target_insts, requires_grad=False).to(device)
-            target_labels = torch.tensor(target_labels).to(device)
-            target_logprobs, _, _ = mdan([target_insts], tinputs)
-            train_val_loss_dict['clf_losses_val'].append(F.nll_loss(target_logprobs[0], target_labels))
-            target_insts = target_insts.cpu().numpy()
-            target_labels = target_labels.cpu().numpy()
+            test_target_insts = torch.tensor(test_target_insts, requires_grad=False).to(device)
+            test_target_labels = torch.tensor(test_target_labels).to(device)
+            target_logprobs = mdan.inference(test_target_insts)
+            train_val_loss_dict['clf_losses_val'].append(F.nll_loss(target_logprobs, test_target_labels))
             mdan.train()
+            
             logger.info("Iteration {}, loss = {}".format(t, running_loss))
            
         time_end = time.time()
-        # Test on other domains.
         mdan.eval()
-        target_insts = torch.tensor(target_insts, requires_grad=False).to(device)
-        target_labels = torch.tensor(target_labels)
-        preds_labels = torch.max(mdan.inference(target_insts), 1)[1].cpu().data.squeeze_()
-        pred_scores = torch.exp(mdan.inference(target_insts)).to(device)[:,1]
-        pred_acc = torch.sum(preds_labels == target_labels).item() / float(target_insts.size(0))
-        error_dicts[data_name[i]] = preds_labels.numpy() != target_labels.numpy()
+        # Validation on train source samples
+        train_source_insts = torch.tensor(source_insts[0], requires_grad=False).to(device)
+        train_source_labels = torch.tensor(source_labels[0]).to(device)
+
+        train_pred_scores = torch.exp(mdan.inference(train_source_insts)).to(device)[:,1]
+       
+        # Validation on test target samples.   
+        test_target_insts = torch.tensor(test_target_insts, requires_grad=False).to(device)
+        test_target_labels = torch.tensor(test_target_labels).to(device)
+        preds_labels = torch.max(mdan.inference(test_target_insts), 1)[1]#.cpu().data.squeeze_()
+        pred_scores = torch.exp(mdan.inference(test_target_insts)).to(device)[:,1]
+        pred_acc = torch.sum(preds_labels == test_target_labels).item() / float(test_target_insts.size(0))
+        error_dicts[data_name[i]] = preds_labels.cpu().numpy() != test_target_labels.cpu().numpy()
         logger.info("Prediction accuracy on {} = {}, time used = {} seconds.".
                     format(data_name[i], pred_acc, time_end - time_start))
         results[data_name[i]] = pred_acc
     logger.info("Prediction accuracy with multiple source domain adaptation using madnNet: ")
     logger.info(results)
     pickle.dump(error_dicts, open("{}-{}-{}-{}.pkl".format(args.name, args.frac, args.model, args.mode), "wb"))
-    pickle.dump(train_val_loss_dict, open("train_val_loss_dict-{}-{}-{}-{}.pkl".format(args.name, args.frac, args.model, args.mode), "wb"))
-    with open("pred_scores-{}-{}-{}-{}.pkl".format(args.name, args.frac, args.model, args.mode), "wb")as file_pred_scores:
+    pickle.dump(train_val_loss_dict, open("train_val_loss_dict-{}-{}-{}-{}-{}.pkl".format(args.name, args.frac, args.model, args.mode, mu), "wb"))
+    with open("pred_scores-{}-{}-{}-{}-{}.pkl".format(args.name, args.frac, args.model, args.mode, mu), "wb") as file_pred_scores:
       pickle.dump(pred_scores.detach().cpu().numpy(), file_pred_scores)
-      pickle.dump(target_labels.detach().cpu().numpy(), file_pred_scores)
+      pickle.dump(test_target_labels.detach().cpu().numpy(), file_pred_scores)
+      pickle.dump(train_pred_scores.detach().cpu().numpy(), file_pred_scores)
+      pickle.dump(train_source_labels.detach().cpu().numpy(), file_pred_scores)
     logger.info("*" * 100)
     
 

@@ -44,7 +44,7 @@ class MDANet(nn.Module):
         # Gradient reversal layer.
         self.grls = [GradientReversalLayer() for _ in range(self.num_domains)]
 
-    def forward(self, sinputs, tinputs):
+    def forward(self, sinputs, tinputs, s_labels):
         """
         :param sinputs:     A list of k inputs from k source domains.
         :param tinputs:     Input from the target domain.
@@ -56,6 +56,7 @@ class MDANet(nn.Module):
                 sh_relu[i] = F.relu(hidden(sh_relu[i]))
         for hidden in self.hiddens:
             th_relu = F.relu(hidden(th_relu))
+        ### Here sh_relu and th_relu contain latent representation of the inputs
         # Classification probabilities on k source domains.
         logprobs = []
         for i in range(self.num_domains):
@@ -63,7 +64,7 @@ class MDANet(nn.Module):
         # Domain classification accuracies.
         sdomains, tdomains = [], []
         for i in range(self.num_domains):
-            sdomains.append(F.log_softmax(self.domains[i](self.grls[i](sh_relu[i])), dim=1))
+            sdomains.append(F.log_softmax(self.domains[i](self.grls[i](sh_relu[i][s_labels[i] == 0,:])), dim=1))
             tdomains.append(F.log_softmax(self.domains[i](self.grls[i](th_relu)), dim=1))
         return logprobs, sdomains, tdomains
 

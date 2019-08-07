@@ -42,8 +42,8 @@ def data_loader(inputs, targets, batch_size, shuffle=True):
 def multi_data_loader(inputs, targets, batch_size, shuffle=True):
     """
     Both inputs and targets are list of numpy arrays, containing instances and labels from multiple sources.
-    """
-    assert len(inputs) == len(targets)
+    """#Here targets are actually labels of being a signal or background
+    assert len(inputs) == len(targets) 
     input_sizes = [data.shape[0] for data in inputs]
     max_input_size = max(input_sizes)
     num_domains = len(inputs)
