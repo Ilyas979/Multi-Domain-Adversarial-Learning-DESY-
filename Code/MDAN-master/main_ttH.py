@@ -26,7 +26,7 @@ parser.add_argument("-m", "--model", help="Choose a model to train: [mdan]",
                     type=str, default="mdan")
 # The experimental setting of using 48 dimensions of features is according to the papers in the literature.
 parser.add_argument("-d", "--dimension", help="Number of features to be used in the experiment",
-                    type=int, default=44)
+                    type=int, default=40)
 parser.add_argument("-u", "--mu", help="Hyperparameter of the coefficient for the domain adversarial loss",
                     type=float, default=0.5)
 parser.add_argument("-e", "--epoch", help="Number of training epochs", type=int, default=15)
@@ -75,8 +75,8 @@ logger.info("Training fraction = {}, number of actual training data instances = 
 logger.info("-" * 100)
 
 if args.model == "mdan":
-    configs = {"input_dim": input_dim, "hidden_layers": [100, 2, 2], "num_classes": 2,
-               "num_epochs": args.epoch, "batch_size": args.batch_size, "lr": 1e-1, "mu": args.mu, "num_domains":
+    configs = {"input_dim": input_dim, "hidden_layers": [30, 2, 2], "num_classes": 2,
+               "num_epochs": args.epoch, "batch_size": args.batch_size, "lr": 1e-2, "mu": args.mu, "num_domains":
                    num_data_sets - 1, "mode": args.mode, "gamma": 10.0, "verbose": args.verbose}
     num_epochs = configs["num_epochs"]
     batch_size = configs["batch_size"]
@@ -108,16 +108,17 @@ if args.model == "mdan":
         test_target_labels = data_labels[i][num_trains:, :].ravel().astype(np.int64)
         test_target_insts = torch.tensor(test_target_insts, requires_grad=False).to(device)
         test_target_labels = torch.tensor(test_target_labels).to(device)
-
         # Train DannNet.
         mdan = MDANet(configs).to(device)
         optimizer = optim.Adadelta(mdan.parameters(), lr=lr)
+        #optimizer = optim.Adamax(mdan.parameters())
 
         mdan.eval()
         
         target_logprobs = mdan.inference(test_target_insts)
+       
         train_val_loss_dict['clf_losses_val'].append(F.nll_loss(target_logprobs, test_target_labels))
-
+        #print(F.nll_loss(target_logprobs, test_target_labels))
         target_insts = torch.tensor(target_insts, requires_grad=False).to(device)
         target_labels = torch.tensor(target_labels)
         preds_labels = torch.max(mdan.inference(target_insts), 1)[1].cpu().data.squeeze_()
@@ -125,6 +126,7 @@ if args.model == "mdan":
         target_insts = target_insts.cpu().numpy()
         target_labels = target_labels.cpu().numpy()
         print("accuracy before training: ", pred_acc)
+        
         target_insts_from_bkg = target_insts[target_labels == 0,:]
 
         mdan.train()
@@ -133,6 +135,7 @@ if args.model == "mdan":
         for t in range(num_epochs):
             running_loss, sum_in_epoch_losses, sum_in_epoch_domain_losses = 0.0, 0.0, 0.0
             train_loader = multi_data_loader(source_insts, source_labels, batch_size)
+            train_loader_size = 0
             for xs, ys in train_loader:
                 #These 'tlabels' are labels of being in a particular source. One's means that it is source, Zeros that it is target.
                 bkg_in_batch_size = list(ys[0]).count(0)
@@ -150,12 +153,13 @@ if args.model == "mdan":
                 optimizer.zero_grad()
                 logprobs, sdomains, tdomains = mdan(xs, tinputs, ys) #this line only evals probs of being a signal and belonging to a particular source given a current weights of NN
                 # Compute prediction accuracy on multiple training sources.
-                losses = torch.stack([F.nll_loss(logprobs[j], ys[j]) for j in range(num_domains)])
+                losses = torch.stack([F.nll_loss(logprobs[j], ys[j]) for j in range(num_domains)]) 
+                #print('train_loss: ', losses)
                 domain_losses = torch.stack([F.nll_loss(sdomains[j], slabels) +
                                            F.nll_loss(tdomains[j], tlabels) for j in range(num_domains)])
                 # Different final loss function depending on different training modes.
                 if mode == "maxmin":
-                    loss = torch.max(losses) + mu * torch.min(domain_losses)
+                    loss = torch.max(losses) +  mu * torch.min(domain_losses)
                     #what it does actually is: loss = losses[0] + mu * domain_losses[0]
                 elif mode == "dynamic":
                     loss = torch.log(torch.sum(torch.exp(gamma * (losses + mu * domain_losses)))) / gamma
@@ -164,12 +168,13 @@ if args.model == "mdan":
                 running_loss += loss.item()
                 sum_in_epoch_losses += losses
                 sum_in_epoch_domain_losses += domain_losses
+                train_loader_size += 1
                 loss.backward()
                 optimizer.step()
 
-            train_val_loss_dict['clf_losses'].append(sum_in_epoch_losses)
-            train_val_loss_dict['discr_losses'].append(mu*sum_in_epoch_domain_losses)
-            train_val_loss_dict['total_loss_in_epoch'].append(running_loss)
+            train_val_loss_dict['clf_losses'].append(sum_in_epoch_losses / train_loader_size)
+            train_val_loss_dict['discr_losses'].append(mu*sum_in_epoch_domain_losses / train_loader_size)
+            train_val_loss_dict['total_loss_in_epoch'].append(running_loss / train_loader_size)
             
             # Evaluate the loss on target domain
             mdan.eval()
@@ -177,6 +182,7 @@ if args.model == "mdan":
             test_target_labels = torch.tensor(test_target_labels).to(device)
             target_logprobs = mdan.inference(test_target_insts)
             train_val_loss_dict['clf_losses_val'].append(F.nll_loss(target_logprobs, test_target_labels))
+            #print('valid_loss: ', F.nll_loss(target_logprobs, test_target_labels))
             mdan.train()
             
             logger.info("Iteration {}, loss = {}".format(t, running_loss))

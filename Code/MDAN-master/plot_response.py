@@ -15,7 +15,7 @@ import matplotlib.pyplot as plt
 from sklearn.metrics import roc_auc_score
 from sklearn.metrics import roc_curve, auc
 
-with open("pred_scores-ttH-0.66-mdan-maxmin-0.0.pkl", "rb") as f:
+with open("pred_scores-ttH-0.66-mdan-maxmin-0.5.pkl", "rb") as f:
   y_score_test = pickle.load(f)
   y_test = pickle.load(f)
   y_score_train = pickle.load(f)
@@ -39,7 +39,7 @@ plt.legend(loc='upper right')
 plt.title("Response_NN")
 plt.xlabel('NN response')
 plt.ylabel('dN/N')
-plt.savefig("../../Plots/Response/Response_mu_0")
+plt.savefig("../../Plots/Response/Response_mu_0,5")
 plt.show()
 plt.close()
 

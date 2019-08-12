@@ -15,7 +15,7 @@ import matplotlib.pyplot as plt
 from sklearn.metrics import roc_auc_score
 from sklearn.metrics import roc_curve, auc
 
-with open("pred_scores-ttH-0.66-mdan-maxmin.pkl", "rb") as f:
+with open("pred_scores-ttH-0.66-mdan-maxmin-0.0.pkl", "rb") as f:
   y_score = pickle.load(f)
   y_test = pickle.load(f)
 

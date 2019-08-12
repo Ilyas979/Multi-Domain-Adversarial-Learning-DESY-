@@ -13,11 +13,12 @@ from utils import multi_data_loader
 import uproot, pandas
 import matplotlib.pyplot as plt
 
-train_val_loss_dict = pickle.load(open("train_val_loss_dict-ttH-0.66-mdan-maxmin.pkl", "rb"))
+train_val_loss_dict = pickle.load(open("train_val_loss_dict-ttH-0.66-mdan-maxmin-0.5.pkl", "rb"))
 # {'clf_losses': [], 'discr_losses' : [], 'total_loss_in_epoch': [], 'clf_losses_val': []}
 for key, values in train_val_loss_dict.items():
-  if key != 'clf_losses_val':  
-    plt.plot(values, label=key)
+  #if key != 'clf_losses_val':  
+  plt.plot(values, label=key)
+
 plt.legend()
 plt.savefig("../../Plots/train_val_loss_plot")
 plt.show()
