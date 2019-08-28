@@ -23,6 +23,9 @@ def save_best_setting(old_dic, curr_dic):
   else:
     return curr_dic
 
+def count_and_save_significance(y_score_test, y_test, y_score_train, y_train):
+  pass
+
 parser = argparse.ArgumentParser()
 parser.add_argument("-n", "--name", help="Name used to save the log file.", type=str, default="ttH")
 parser.add_argument("-f", "--frac", help="Fraction of the supervised training data to be used.",
@@ -44,6 +47,8 @@ parser.add_argument("-l", "--hidden_layers", help="Number of neurons in hidden l
 parser.add_argument("-dom", "--data_from", help="Data from domains:[data_src_vs_src1|data_trg_vs_trg1|data_src_vs_trg|data_trg_vs_src]", type=str, default='data_src_vs_trg') 
 parser.add_argument("-dev", "--device_name", help="Device to use: [cuda|cpu].", type=str, default='cuda') 
 parser.add_argument("-u_mode", "--mu_mode", help="Strategy for 'mu': [const|off_disc]", type=str, default='const')
+args = parser.parse_args()
+
 # Compile and configure all the model parameters.
 args = parser.parse_args()
 
@@ -73,13 +78,6 @@ elif num_data_sets == 2:
     data_name = pickle.load(f)
   num_insts.append(data_labels[0].shape[0])
   num_insts.append(data_labels[1].shape[0])
-
-###Training on target and testing on source
-'''data_insts = list(reversed(data_insts))
-data_labels = list(reversed(data_labels)) 
-data_name = list(reversed(data_name)) 
-num_insts = list(reversed(num_insts)) 
-'''
 
 logger.info("Data sets: {}".format(data_name))
 logger.info("Number of total instances in the data sets: {}".format(num_insts))
@@ -117,13 +115,6 @@ if args.model == "mdan":
             if j != i:
                 source_insts.append(data_insts[j][:num_trains, :].todense().astype(np.float32))
                 source_labels.append(data_labels[j][:num_trains, :].ravel().astype(np.int64))
-        #Build source instances for testing
-        test_source_insts_cpu = []
-        test_source_labels_cpu = []
-        for j in range(num_data_sets):
-          if j != i:
-            test_source_insts_cpu.append(data_insts[j][num_trains:, :].todense().astype(np.float32))
-            test_source_labels_cpu.append(data_labels[j][num_trains:, :].ravel().astype(np.int64))
         # Build target instances.
         target_idx = i
         target_insts = data_insts[i][:num_trains, :].todense().astype(np.float32)
@@ -152,6 +143,8 @@ if args.model == "mdan":
         # Training phase.
         time_start = time.time()
         for t in range(num_epochs):
+            if args.mu_mode == 'off_disc' and t > 300: 
+              mu = 1.2 - (1.2 - 1.0) / 200.0 * (t - 300.0)
             running_loss, sum_in_epoch_losses, sum_in_epoch_domain_losses = 0.0, 0.0, 0.0
             train_loader = multi_data_loader(source_insts, source_labels, batch_size)
             train_loader_size = 0
@@ -211,16 +204,12 @@ if args.model == "mdan":
         mdan.eval()
         del optimizer
         torch.cuda.empty_cache()
-        # Validation on test !source! samples
+        # Validation on train source samples
         with torch.no_grad():
           train_source_insts = torch.tensor(source_insts[0], requires_grad=False).to(device)
           train_source_labels = torch.tensor(source_labels[0]).to(device)
-          train_source_pred_scores = torch.exp(mdan.inference(train_source_insts)).to(device)[:,1]
-          
-          test_source_insts = torch.tensor(test_source_insts_cpu[0], requires_grad=False).to(device)
-          test_source_labels = torch.tensor(test_source_labels_cpu[0]).to(device)
-          test_source_pred_scores = torch.exp(mdan.inference(test_source_insts)).to(device)[:,1]
-        # Validation on test !target! samples. 
+          train_pred_scores = torch.exp(mdan.inference(train_source_insts)).to(device)[:,1]
+        # Validation on test target samples. 
           best_epoch = args.epoch-1  
           test_target_insts = torch.tensor(test_target_insts_cpu, requires_grad=False).to(device)
           test_target_labels = torch.tensor(test_target_labels_cpu).to(device)
@@ -230,7 +219,7 @@ if args.model == "mdan":
           logger.info("Prediction accuracy on {} = {}, time used = {} seconds.".
                       format(data_name[i], pred_acc, time_end - time_start))
           results[data_name[i]] = pred_acc
-          del mdan, test_source_insts
+          del mdan, train_source_insts
           torch.cuda.empty_cache()
         #AUCROC
         fpr, tpr, _ = roc_curve(test_target_labels.detach().cpu().numpy(), pred_scores.detach().cpu().numpy())
@@ -243,9 +232,7 @@ if args.model == "mdan":
     with open("../pred_scores/pred_scores-{}-{}-{}-{}-epochs_{}-mu_{}-l_{}-data_from_{}.pkl".format(args.name, args.frac, args.model, args.mode, args.epoch, args.mu, args.hidden_layers, data_from), "wb") as file_pred_scores:
       pickle.dump(pred_scores.detach().cpu().numpy(), file_pred_scores)
       pickle.dump(test_target_labels.detach().cpu().numpy(), file_pred_scores)
-      pickle.dump(test_source_pred_scores.detach().cpu().numpy(), file_pred_scores)
-      pickle.dump(test_source_labels.detach().cpu().numpy(), file_pred_scores)
-      pickle.dump(train_source_pred_scores.detach().cpu().numpy(), file_pred_scores)
+      pickle.dump(train_pred_scores.detach().cpu().numpy(), file_pred_scores)
       pickle.dump(train_source_labels.detach().cpu().numpy(), file_pred_scores)
     logger.info("*" * 100)
 
@@ -253,7 +240,7 @@ if args.model == "mdan":
       fieldnames = ['mu','accuracy', 'auc_roc', 'stopped_epoch', 'epochs', 'hidden_layers', 'lr', 'data_from']
       writer = csv.DictWriter(csv_f, fieldnames=fieldnames)
       writer.writerow({"mu": args.mu, "accuracy": pred_acc, "auc_roc": auc_roc, "stopped_epoch": best_epoch+1,"epochs": args.epoch, "hidden_layers": configs["hidden_layers"], "lr": lr, "data_from": data_from})
-    del test_target_labels, test_target_insts, test_source_labels, test_source_pred_scores, pred_scores, target_insts, target_labels, pred_acc, preds_labels
+    del test_target_labels, test_target_insts, train_source_labels, train_pred_scores, pred_scores, target_insts, target_labels, pred_acc, preds_labels
     torch.cuda.empty_cache()
 else:
     raise ValueError("No support for the following model: {}.".format(args.model))
