@@ -16,6 +16,7 @@ from utils import multi_data_loader
 import uproot, pandas
 import csv
 from sklearn.metrics import roc_curve, auc
+import matplotlib.pyplot as plt
 
 def save_best_setting(old_dic, curr_dic):
   if old_dic['best_clf_loss_val'] < curr_dic['best_clf_loss_val']:
@@ -23,8 +24,39 @@ def save_best_setting(old_dic, curr_dic):
   else:
     return curr_dic
 
-def count_and_save_significance(y_score_test, y_test, y_score_train, y_train):
-  pass
+def calculate_and_save_significance(y_score_src, y_src, y_score_trg, y_trg, cut = 0.6):
+  
+  #Source
+  signal_src = y_score_src[y_src==1]
+  bkg_src = y_score_src[y_src==0]
+  #Target
+  signal_trg = y_score_trg[y_trg==1]
+  bkg_trg = y_score_trg[y_trg==0]
+  
+  #Source
+  signal_src_cut = signal_src[signal_src > cut] 
+  bkg_src_cut = bkg_src[bkg_src > cut] 
+  b_src = bkg_src_cut.size / bkg_src.size * 0.95 * 50e3
+  
+  #Target
+  signal_trg_cut = signal_trg[signal_trg > cut]
+  s = signal_trg_cut.size / signal_trg.size * 0.05 * 50e3
+  bkg_trg_cut = bkg_trg[bkg_trg > cut] 
+  b_trg = bkg_trg_cut.size / bkg_trg.size * 0.95 * 50e3
+
+  sigma = b_src - b_trg
+  if b_trg+sigma**2 != 0.0:
+    Z_A = s/np.sqrt(b_trg+sigma**2)
+  else:
+    Z_A = -1
+  return Z_A
+  #print("s = {}, b = {}, sigma_2 = {}, Significance = {}".format(s, b_trg, sigma**2, Z_A))
+  '''
+  with open('../significance_in_training/significance_in_training.csv','a+') as csv_f:
+      fieldnames = ['significance', 's', 'b', '\sigma^2']
+      writer = csv.DictWriter(csv_f, fieldnames=fieldnames)
+      writer.writerow({'significance': Z_A, 's': s, 'b': b_test, '\sigma^2': sigma**2})
+  '''
 
 parser = argparse.ArgumentParser()
 parser.add_argument("-n", "--name", help="Name used to save the log file.", type=str, default="ttH")
@@ -47,8 +79,6 @@ parser.add_argument("-l", "--hidden_layers", help="Number of neurons in hidden l
 parser.add_argument("-dom", "--data_from", help="Data from domains:[data_src_vs_src1|data_trg_vs_trg1|data_src_vs_trg|data_trg_vs_src]", type=str, default='data_src_vs_trg') 
 parser.add_argument("-dev", "--device_name", help="Device to use: [cuda|cpu].", type=str, default='cuda') 
 parser.add_argument("-u_mode", "--mu_mode", help="Strategy for 'mu': [const|off_disc]", type=str, default='const')
-args = parser.parse_args()
-
 # Compile and configure all the model parameters.
 args = parser.parse_args()
 
@@ -79,6 +109,13 @@ elif num_data_sets == 2:
   num_insts.append(data_labels[0].shape[0])
   num_insts.append(data_labels[1].shape[0])
 
+###Training on target and testing on source
+'''data_insts = list(reversed(data_insts))
+data_labels = list(reversed(data_labels)) 
+data_name = list(reversed(data_name)) 
+num_insts = list(reversed(num_insts)) 
+'''
+
 logger.info("Data sets: {}".format(data_name))
 logger.info("Number of total instances in the data sets: {}".format(num_insts))
 # Partition the data set into training and test parts, following the convention in the ICML-2012 paper, use a fixed
@@ -105,7 +142,7 @@ if args.model == "mdan":
     logger.info("Training with domain adaptation using PyTorch madnNet: ")
     logger.info("Hyperparameter setting = {}.".format(configs))
     error_dicts = {}
-    train_val_loss_dict = {'clf_losses': [], 'discr_losses' : [], 'total_loss_in_epoch': [], 'clf_losses_val': []}
+    train_val_loss_dict = {'clf_losses': [], 'discr_losses' : [], 'total_loss_in_epoch': [], 'clf_losses_trg_val': [], 'clf_losses_src_val': [], 'significance': []}
     for i in range(num_data_sets):
         if i == 0: continue
         # Build source instances.
@@ -115,6 +152,13 @@ if args.model == "mdan":
             if j != i:
                 source_insts.append(data_insts[j][:num_trains, :].todense().astype(np.float32))
                 source_labels.append(data_labels[j][:num_trains, :].ravel().astype(np.int64))
+        #Build source instances for testing
+        test_source_insts_cpu = []
+        test_source_labels_cpu = []
+        for j in range(num_data_sets):
+          if j != i:
+            test_source_insts_cpu.append(data_insts[j][num_trains:, :].todense().astype(np.float32))
+            test_source_labels_cpu.append(data_labels[j][num_trains:, :].ravel().astype(np.int64))
         # Build target instances.
         target_idx = i
         target_insts = data_insts[i][:num_trains, :].todense().astype(np.float32)
@@ -122,7 +166,7 @@ if args.model == "mdan":
 
         test_target_insts_cpu = data_insts[i][num_trains:, :].todense().astype(np.float32)
         test_target_labels_cpu = data_labels[i][num_trains:, :].ravel().astype(np.int64)
-
+        
         # Train DannNet.
         mdan = MDANet(configs).to(device)
         optimizer = optim.Adadelta(mdan.parameters(), lr=lr)
@@ -143,8 +187,6 @@ if args.model == "mdan":
         # Training phase.
         time_start = time.time()
         for t in range(num_epochs):
-            if args.mu_mode == 'off_disc' and t > 300: 
-              mu = 1.2 - (1.2 - 1.0) / 200.0 * (t - 300.0)
             running_loss, sum_in_epoch_losses, sum_in_epoch_domain_losses = 0.0, 0.0, 0.0
             train_loader = multi_data_loader(source_insts, source_labels, batch_size)
             train_loader_size = 0
@@ -188,28 +230,43 @@ if args.model == "mdan":
             train_val_loss_dict['discr_losses'].append(sum_in_epoch_domain_losses / train_loader_size / 2.0)
             train_val_loss_dict['total_loss_in_epoch'].append(running_loss / train_loader_size)
             
-            # Evaluate the loss on target domain
+            # Evaluate the loss on target domain (on validation data)
             mdan.eval()
             with torch.no_grad():
               test_target_insts = torch.tensor(test_target_insts_cpu, requires_grad=False).to(device)
               test_target_labels = torch.tensor(test_target_labels_cpu).to(device)
-              target_logprobs = mdan.inference(test_target_insts)
-              train_val_loss_dict['clf_losses_val'].append(F.nll_loss(target_logprobs, test_target_labels).item())
-              logger.info("Iteration {}, loss = {}, clf_losses_val = {}".format(t, running_loss / train_loader_size, train_val_loss_dict['clf_losses_val'][-1]))
-              del tinputs, slabels, tlabels, logprobs, sdomains, tdomains, loss, losses, domain_losses, xs, ys, test_target_insts, test_target_labels, target_logprobs
+              test_target_logprobs = mdan.inference(test_target_insts)
+              test_target_pred_scores = torch.exp(test_target_logprobs).to(device)[:,1].detach().cpu().numpy()
+              train_val_loss_dict['clf_losses_trg_val'].append(F.nll_loss(test_target_logprobs, test_target_labels).item())
+              logger.info("Iteration {}, loss = {}, clf_losses_trg_val = {}".format(t, running_loss / train_loader_size, train_val_loss_dict['clf_losses_trg_val'][-1]))
+            # Evaluate the loss on source domain (on validation data)
+            with torch.no_grad():
+              test_source_insts = torch.tensor(test_source_insts_cpu[0], requires_grad=False).to(device)
+              test_source_labels = torch.tensor(test_source_labels_cpu[0]).to(device)
+              test_source_logprobs = mdan.inference(test_source_insts)
+              test_source_pred_scores = torch.exp(test_source_logprobs).to(device)[:,1].detach().cpu().numpy()
+              #train_val_loss_dict['clf_losses_src_val'].append(F.nll_loss(test_source_logprobs, test_source_labels).item())
+              #logger.info("Iteration {}, loss = {}, clf_losses_val = {}".format(t, running_loss / train_loader_size, train_val_loss_dict['clf_losses_src_val'][-1]))
+              train_val_loss_dict['significance'].append( calculate_and_save_significance(test_source_pred_scores, test_source_labels.detach().cpu().numpy(), test_target_pred_scores, test_target_labels.detach().cpu().numpy()) )
+              del tinputs, slabels, tlabels, logprobs, sdomains, tdomains, loss, losses, domain_losses, xs, ys, test_target_insts, test_target_labels, test_target_logprobs, test_source_insts, test_source_labels, test_source_logprobs
               torch.cuda.empty_cache()
+
             mdan.train() 
           
         time_end = time.time()
         mdan.eval()
         del optimizer
         torch.cuda.empty_cache()
-        # Validation on train source samples
+        # Validation on test !source! samples
         with torch.no_grad():
           train_source_insts = torch.tensor(source_insts[0], requires_grad=False).to(device)
           train_source_labels = torch.tensor(source_labels[0]).to(device)
-          train_pred_scores = torch.exp(mdan.inference(train_source_insts)).to(device)[:,1]
-        # Validation on test target samples. 
+          train_source_pred_scores = torch.exp(mdan.inference(train_source_insts)).to(device)[:,1]
+          
+          test_source_insts = torch.tensor(test_source_insts_cpu[0], requires_grad=False).to(device)
+          test_source_labels = torch.tensor(test_source_labels_cpu[0]).to(device)
+          test_source_pred_scores = torch.exp(mdan.inference(test_source_insts)).to(device)[:,1]
+        # Validation on test !target! samples. 
           best_epoch = args.epoch-1  
           test_target_insts = torch.tensor(test_target_insts_cpu, requires_grad=False).to(device)
           test_target_labels = torch.tensor(test_target_labels_cpu).to(device)
@@ -219,7 +276,7 @@ if args.model == "mdan":
           logger.info("Prediction accuracy on {} = {}, time used = {} seconds.".
                       format(data_name[i], pred_acc, time_end - time_start))
           results[data_name[i]] = pred_acc
-          del mdan, train_source_insts
+          del mdan, test_source_insts
           torch.cuda.empty_cache()
         #AUCROC
         fpr, tpr, _ = roc_curve(test_target_labels.detach().cpu().numpy(), pred_scores.detach().cpu().numpy())
@@ -232,7 +289,9 @@ if args.model == "mdan":
     with open("../pred_scores/pred_scores-{}-{}-{}-{}-epochs_{}-mu_{}-l_{}-data_from_{}.pkl".format(args.name, args.frac, args.model, args.mode, args.epoch, args.mu, args.hidden_layers, data_from), "wb") as file_pred_scores:
       pickle.dump(pred_scores.detach().cpu().numpy(), file_pred_scores)
       pickle.dump(test_target_labels.detach().cpu().numpy(), file_pred_scores)
-      pickle.dump(train_pred_scores.detach().cpu().numpy(), file_pred_scores)
+      pickle.dump(test_source_pred_scores.detach().cpu().numpy(), file_pred_scores)
+      pickle.dump(test_source_labels.detach().cpu().numpy(), file_pred_scores)
+      pickle.dump(train_source_pred_scores.detach().cpu().numpy(), file_pred_scores)
       pickle.dump(train_source_labels.detach().cpu().numpy(), file_pred_scores)
     logger.info("*" * 100)
 
@@ -240,7 +299,7 @@ if args.model == "mdan":
       fieldnames = ['mu','accuracy', 'auc_roc', 'stopped_epoch', 'epochs', 'hidden_layers', 'lr', 'data_from']
       writer = csv.DictWriter(csv_f, fieldnames=fieldnames)
       writer.writerow({"mu": args.mu, "accuracy": pred_acc, "auc_roc": auc_roc, "stopped_epoch": best_epoch+1,"epochs": args.epoch, "hidden_layers": configs["hidden_layers"], "lr": lr, "data_from": data_from})
-    del test_target_labels, test_target_insts, train_source_labels, train_pred_scores, pred_scores, target_insts, target_labels, pred_acc, preds_labels
+    del test_target_labels, test_target_insts, test_source_labels, test_source_pred_scores, pred_scores, target_insts, target_labels, pred_acc, preds_labels
     torch.cuda.empty_cache()
 else:
     raise ValueError("No support for the following model: {}.".format(args.model))
