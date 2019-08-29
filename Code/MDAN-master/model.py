@@ -44,6 +44,26 @@ class MDANet(nn.Module):
         # Gradient reversal layer.
         self.grls = [GradientReversalLayer() for _ in range(self.num_domains)]
 
+        ''' def __init__(self, configs):
+        super(MDANet, self).__init__()
+        self.input_dim = configs["input_dim"]
+        self.num_hidden_layers = len(configs["hidden_layers"])
+        self.num_neurons = [self.input_dim] + configs["hidden_layers"]
+        self.num_domains = configs["num_domains"]
+        self.num_neurons_disc = configs["num_neurons_disc"]
+        self.num_neurons_clf = configs["num_neurons_clf"]
+        # Parameters of hidden, fully-connected layers, feature learning component.
+        self.hiddens = nn.ModuleList([nn.Linear(self.num_neurons[i], self.num_neurons[i+1])
+                                      for i in range(self.num_hidden_layers)])
+        # Parameter of the final softmax classification layer.
+        self.softmax = nn.ModuleList([nn.Linear(self.num_neurons[-1], self.num_neurons_clf), nn.Linear(self.num_neurons_clf, configs["num_classes"])])
+        #self.softmax = nn.Linear(self.num_neurons[-1], configs["num_classes"])
+        # Parameter of the domain classification layer, multiple sources single target domain adaptation.
+        #self.domains = nn.ModuleList([nn.Linear(self.num_neurons[-1], self.num_neurons_disc), nn.Linear(self.num_neurons_disc, 2)])
+        self.domains = nn.ModuleList([nn.Linear(self.num_neurons[-1], 2)])
+        # Gradient reversal layer.
+        self.grls = [GradientReversalLayer() for _ in range(self.num_domains)]
+        '''
     def forward(self, sinputs, tinputs, s_labels):
         """
         :param sinputs:     A list of k inputs from k source domains.
@@ -65,6 +85,7 @@ class MDANet(nn.Module):
         sdomains, tdomains = [], []
         for i in range(self.num_domains):
             sdomains.append(F.log_softmax(self.domains[i](self.grls[i](sh_relu[i][s_labels[i] == 0,:])), dim=1))
+            #sdomains.append(F.log_softmax(self.domains[i](self.grls[i](sh_relu[i])), dim=1))   
             tdomains.append(F.log_softmax(self.domains[i](self.grls[i](th_relu)), dim=1))
         return logprobs, sdomains, tdomains
 
