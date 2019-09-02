@@ -84,8 +84,8 @@ class MDANet(nn.Module):
         # Domain classification accuracies.
         sdomains, tdomains = [], []
         for i in range(self.num_domains):
-            sdomains.append(F.log_softmax(self.domains[i](self.grls[i](sh_relu[i][s_labels[i] == 0,:])), dim=1))
-            #sdomains.append(F.log_softmax(self.domains[i](self.grls[i](sh_relu[i])), dim=1))   
+            #sdomains.append(F.log_softmax(self.domains[i](self.grls[i](sh_relu[i][s_labels[i] == 0,:])), dim=1))
+            sdomains.append(F.log_softmax(self.domains[i](self.grls[i](sh_relu[i])), dim=1))   
             tdomains.append(F.log_softmax(self.domains[i](self.grls[i](th_relu)), dim=1))
         return logprobs, sdomains, tdomains
 

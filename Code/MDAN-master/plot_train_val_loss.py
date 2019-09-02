@@ -41,13 +41,13 @@ args = parser.parse_args()
 N = 1
 
 train_val_loss_dict = pickle.load(open("../train_val_loss_dicts/train_val_loss_dict-{}-{}-{}-{}-epochs_{}-mu_{}-l_{}-data_from_{}.pkl".format(args.name, args.frac, args.model, args.mode, args.epoch, args.mu, args.hidden_layers, args.data_from), "rb"))
-two_col = ["C0", "C2"]
-
+lw = 2
+plt.rc('font', size=12)  
 fig, ax1 = plt.subplots()
 ax1.set_ylabel('NLL loss')
 ax1.set_xlabel('Epochs')
 # {'clf_losses': [], 'discr_losses' : [], 'total_loss_in_epoch': [], 'clf_losses_trg_val': [], 'significance', 'best_setting' : {'best_clf_loss_val': 1e10, 'accuracy': 0, 'epoch': 0} }
-if args.mu == 0.0:
+'''if args.mu == 0.0:
   for key, col in zip(['clf_losses', 'clf_losses_trg_val'], two_col):
     train_val_loss_dict[key] = np.convolve(train_val_loss_dict[key], np.ones((N,))/N, mode='valid')
     ax1.plot(train_val_loss_dict[key], label=key, color = col)
@@ -55,14 +55,27 @@ else:
   for key in ['clf_losses', 'discr_losses', 'clf_losses_trg_val']:
     train_val_loss_dict[key] = np.convolve(train_val_loss_dict[key], np.ones((N,))/N, mode='valid')
     ax1.plot(train_val_loss_dict[key], label=key)
+'''
+
+train_val_loss_dict['clf_losses'] = np.convolve(train_val_loss_dict['clf_losses'], np.ones((N,))/N, mode='valid')
+ax1.plot(train_val_loss_dict['clf_losses'], label='clf_loss_S_1', color = 'C0', lw = lw, ls = '--')
+
+if args.mu != 0.0:
+  train_val_loss_dict['discr_losses'] = np.convolve(train_val_loss_dict['discr_losses'], np.ones((N,))/N, mode='valid')
+  ax1.plot(train_val_loss_dict['discr_losses'], label='discr_loss', color = 'C1', lw = lw, ls = '-.')
+
+train_val_loss_dict['clf_losses_trg_val'] = np.convolve(train_val_loss_dict['clf_losses_trg_val'], np.ones((N,))/N, mode='valid')
+ax1.plot(train_val_loss_dict['clf_losses_trg_val'], label='clf_loss_S_2', color = 'C2', lw = lw, ls = ':')
 
 ax2 = ax1.twinx()
-ax2.set_ylabel('significance', color='red')
+ax2.set_ylabel('Significance', color='red')
 train_val_loss_dict['significance'] = np.convolve(train_val_loss_dict['significance'], np.ones((N,))/N, mode='valid')
-ax2.plot(train_val_loss_dict['significance'], label='significance', color='red')
+ax2.plot(train_val_loss_dict['significance'], label='significance', color='red', lw = lw)
 
 ax1.legend()
-plt.savefig("../../Plots/Training_plots/Atrain_val_loss_plot-epochs_{}-mu_{}-l_{}-data_from_{}.png".format(args.epoch, args.mu, args.hidden_layers, args.data_from), dpi = 300)
+ax1.set_ylim([0.5, 1.2])
+ax1.set_xlim([0, 500])
+plt.savefig("../../Plots/Training_plots/train_val_loss_plot-epochs_{}-mu_{}-l_{}-data_from_{}.png".format(args.epoch, args.mu, args.hidden_layers, args.data_from), dpi = 300)
 plt.show()
 """
 plt.plot(train_val_loss_dict['clf_losses'], label='clf_losses')

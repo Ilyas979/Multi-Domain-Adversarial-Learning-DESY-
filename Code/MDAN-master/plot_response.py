@@ -53,11 +53,14 @@ bkg_test = y_score_test[y_test==0]
 signal_train = y_score_train[y_train==1]
 bkg_train = y_score_train[y_train==0]
 
+lw = 2
+plt.rc('font', size=12) 
+
 bins = np.histogram(np.hstack((signal_test, bkg_test, signal_train, bkg_train)), bins=40)[1]
 plt.hist(signal_test, bins, alpha=0.5, label='sgnl_S_2', density = True, color = '#1f77b4')
 plt.hist(bkg_test, bins, alpha=0.5, label='bkg_S_2', density = True, color = '#ff7f0e')
-plt.hist(signal_train, bins, alpha=1, label='sgnl_S_1', density = True, color = '#1f77b4', histtype = 'step')
-plt.hist(bkg_train, bins, alpha=1, label='bkg_S_1', density = True, color = '#ff7f0e', histtype = 'step')
+plt.hist(signal_train, bins, alpha=1, label='sgnl_S_1', density = True, color = '#1f77b4', histtype = 'step', lw = lw)
+plt.hist(bkg_train, bins, alpha=1, label='bkg_S_1', density = True, color = '#ff7f0e', histtype = 'step', lw = lw)
 
 plt.xlim((0,1))
 plt.legend(loc='upper right')

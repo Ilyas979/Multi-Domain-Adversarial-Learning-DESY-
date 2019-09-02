@@ -48,7 +48,7 @@ def calculate_and_save_significance(y_score_src, y_src, y_score_trg, y_trg, cut 
   if b_trg+sigma**2 != 0.0:
     Z_A = s/np.sqrt(b_trg+sigma**2)
   else:
-    Z_A = -1
+    Z_A = 0
   return Z_A
   #print("s = {}, b = {}, sigma_2 = {}, Significance = {}".format(s, b_trg, sigma**2, Z_A))
   '''
@@ -181,8 +181,8 @@ if args.model == "mdan":
           del test_target_insts, test_target_labels, preds_labels, pred_acc
           torch.cuda.empty_cache()
 
-        target_insts_from_bkg = target_insts[target_labels == 0,:]
-        #target_insts_from_bkg = target_insts
+        #target_insts_from_bkg = target_insts[target_labels == 0,:]
+        target_insts_from_bkg = target_insts
         mdan.train()
         # Training phase.
         time_start = time.time()
@@ -192,8 +192,8 @@ if args.model == "mdan":
             train_loader_size = 0
             for xs, ys in train_loader:
                 #These 'tlabels' are labels of being in a particular source. One's means that it is source, Zeros that it is target.
-                bkg_in_batch_size = list(ys[0]).count(0)
-                #bkg_in_batch_size = batch_size
+                #bkg_in_batch_size = list(ys[0]).count(0)
+                bkg_in_batch_size = batch_size
                 #print("bkg in source!!!: ", bkg_in_batch_size)
                 slabels = torch.ones(bkg_in_batch_size, requires_grad=False).type(torch.LongTensor).to(device)
                 tlabels = torch.zeros(bkg_in_batch_size, requires_grad=False).type(torch.LongTensor).to(device)
@@ -296,9 +296,9 @@ if args.model == "mdan":
     logger.info("*" * 100)
 
     with open('../../Results/mu_accuracy.csv','a') as csv_f:
-      fieldnames = ['mu','accuracy', 'auc_roc', 'stopped_epoch', 'epochs', 'hidden_layers', 'lr', 'data_from']
+      fieldnames = ['mu','accuracy', 'auc_roc', 'stopped_epoch', 'epochs', 'hidden_layers', 'lr', 'data_from', 'significance']
       writer = csv.DictWriter(csv_f, fieldnames=fieldnames)
-      writer.writerow({"mu": args.mu, "accuracy": pred_acc, "auc_roc": auc_roc, "stopped_epoch": best_epoch+1,"epochs": args.epoch, "hidden_layers": configs["hidden_layers"], "lr": lr, "data_from": data_from})
+      writer.writerow({"mu": args.mu, "accuracy": pred_acc, "auc_roc": auc_roc, "stopped_epoch": best_epoch+1,"epochs": args.epoch, "hidden_layers": configs["hidden_layers"], "lr": lr, "data_from": data_from, "significance": train_val_loss_dict['significance'][-1]})
     del test_target_labels, test_target_insts, test_source_labels, test_source_pred_scores, pred_scores, target_insts, target_labels, pred_acc, preds_labels
     torch.cuda.empty_cache()
 else:
