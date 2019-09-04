@@ -34,6 +34,7 @@ parser.add_argument("-o", "--mode", help="Mode of combination rule for MDANet: [
 parser.add_argument("-l", "--hidden_layers", help="Number of neurons in hidden layers.", nargs='+', type=int, default=[45, 30, 25])
 parser.add_argument("-dom", "--data_from", help="Data from domains:[data_src_vs_src1|data_trg_vs_trg1|data_src_vs_trg]", type=str, default='data_src_vs_trg') 
 parser.add_argument("-dev", "--device_name", help="Device to use: [cuda|cpu].", type=str, default='cuda') 
+parser.add_argument("-d_mode", "--d_mode", help="Strategy for discriminator, either pass bkg events from S1 to discriminator or all instances from S1: [bkg_only|all]", type=str, default='bkg_only')
 args = parser.parse_args()
 
 #hid_lay = args.hidden_layers

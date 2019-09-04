@@ -35,7 +35,7 @@ parser.add_argument("-l", "--hidden_layers", help="Number of neurons in hidden l
 parser.add_argument("-dom", "--data_from", help="Data from domains:[data_src_vs_src1|data_trg_vs_trg1|data_src_vs_trg|data_trg_vs_src]", type=str, default='data_src_vs_trg') 
 parser.add_argument("-dev", "--device_name", help="Device to use: [cuda|cpu].", type=str, default='cuda') 
 parser.add_argument("-u_mode", "--mu_mode", help="Strategy for 'mu': [const|off_disc]", type=str, default='const')
-
+parser.add_argument("-d_mode", "--d_mode", help="Strategy for discriminator, either pass bkg events from S1 to discriminator or all instances from S1: [bkg_only|all]", type=str, default='bkg_only')
 args = parser.parse_args()
 
 N = 1
@@ -74,7 +74,7 @@ ax2.plot(train_val_loss_dict['significance'], label='significance', color='red',
 
 ax1.legend()
 ax1.set_ylim([0.5, 1.2])
-ax1.set_xlim([0, 500])
+ax1.set_xlim([0, 300])
 plt.savefig("../../Plots/Training_plots/train_val_loss_plot-epochs_{}-mu_{}-l_{}-data_from_{}.png".format(args.epoch, args.mu, args.hidden_layers, args.data_from), dpi = 300)
 plt.show()
 """

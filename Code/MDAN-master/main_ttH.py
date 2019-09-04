@@ -79,6 +79,7 @@ parser.add_argument("-l", "--hidden_layers", help="Number of neurons in hidden l
 parser.add_argument("-dom", "--data_from", help="Data from domains:[data_src_vs_src1|data_trg_vs_trg1|data_src_vs_trg|data_trg_vs_src]", type=str, default='data_src_vs_trg') 
 parser.add_argument("-dev", "--device_name", help="Device to use: [cuda|cpu].", type=str, default='cuda') 
 parser.add_argument("-u_mode", "--mu_mode", help="Strategy for 'mu': [const|off_disc]", type=str, default='const')
+parser.add_argument("-d_mode", "--d_mode", help="Strategy for discriminator, either pass bkg events from S1 to discriminator or all instances from S1: [bkg_only|all]", type=str, default='bkg_only')
 # Compile and configure all the model parameters.
 args = parser.parse_args()
 
@@ -169,8 +170,9 @@ if args.model == "mdan":
         
         # Train DannNet.
         mdan = MDANet(configs).to(device)
-        optimizer = optim.Adadelta(mdan.parameters(), lr=lr)
-
+        optimizer = optim.Adadelta(mdan.parameters(), lr=lr) #works
+        #optimizer = optim.Adagrad(mdan.parameters(), lr=lr/5.0) #works
+        #optimizer = optim.SGD(mdan.parameters(), lr=0.01, momentum=0.9) #doesn't work, even momentum doesn't seem to help
         mdan.eval()
         with torch.no_grad():
           test_target_insts = torch.tensor(test_target_insts_cpu, requires_grad=False).to(device)
@@ -181,8 +183,10 @@ if args.model == "mdan":
           del test_target_insts, test_target_labels, preds_labels, pred_acc
           torch.cuda.empty_cache()
 
-        #target_insts_from_bkg = target_insts[target_labels == 0,:]
-        target_insts_from_bkg = target_insts
+        if args.d_mode == "bkg_only":
+          target_insts_from_bkg = target_insts[target_labels == 0,:]
+        else:
+          target_insts_from_bkg = target_insts
         mdan.train()
         # Training phase.
         time_start = time.time()
@@ -192,9 +196,10 @@ if args.model == "mdan":
             train_loader_size = 0
             for xs, ys in train_loader:
                 #These 'tlabels' are labels of being in a particular source. One's means that it is source, Zeros that it is target.
-                #bkg_in_batch_size = list(ys[0]).count(0)
-                bkg_in_batch_size = batch_size
-                #print("bkg in source!!!: ", bkg_in_batch_size)
+                if args.d_mode == "bkg_only":
+                  bkg_in_batch_size = list(ys[0]).count(0)
+                else:
+                  bkg_in_batch_size = batch_size
                 slabels = torch.ones(bkg_in_batch_size, requires_grad=False).type(torch.LongTensor).to(device)
                 tlabels = torch.zeros(bkg_in_batch_size, requires_grad=False).type(torch.LongTensor).to(device)
                 #These 'ys' are labels of being in a particular class, i.e. signal or background
@@ -206,7 +211,7 @@ if args.model == "mdan":
                 tinputs = target_insts_from_bkg[ridx, :]
                 tinputs = torch.tensor(tinputs, requires_grad=False).to(device)
                 optimizer.zero_grad()
-                logprobs, sdomains, tdomains = mdan(xs, tinputs, ys) #this line only evals probs of being a signal and belonging to a particular source given a current weights of NN
+                logprobs, sdomains, tdomains = mdan(xs, tinputs, ys, args.d_mode) #this line only evals probs of being a signal and belonging to a particular source given a current weights of NN
                 # Compute prediction accuracy on multiple training sources.
                 losses = torch.stack([F.nll_loss(logprobs[j], ys[j]) for j in range(num_domains)])
                 domain_losses = torch.stack([F.nll_loss(sdomains[j], slabels) +
