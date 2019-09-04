@@ -44,3 +44,9 @@ However, you will need to specify the parameters yourself editing mu_scan.py, on
 Save results
 
 All the Plots are saved in the corresponding folder. The most important info about each run is stored in the Results/mu_accuracy.csv
+
+
+Recommendations on choosing mu parameter:
+
+mu of slightly more that 1.0 is found favourable while running with -d_mode bkg_only.
+mu of order of 2.0 is preferred while using -d_mode all
