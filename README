@@ -1,0 +1,46 @@
+Dataset construction
+
+Go to Code folder
+ 
+Run 
+
+python root_to_pkl.py
+
+This constructs datasets in Data folder in pickle format.
+
+Training
+
+Run
+
+python main_ttH.py -u 2.0 -d_mode all -e 300
+
+Here -u corresponds to discriminator importance paremeter. -d_mode specifies which strategy for feeding descriminator to use
+"all" - both signal/bkg passed, "bkg_only" - background only. You can also run by default parameters
+
+python main_ttH.py
+
+Evaluation
+
+To plot response, training curves or ROC curve for default training run one of these
+
+python plot_response.py
+python plot_train_val_loss.py
+python roc_curve.py
+
+To plot the results of not default setting specify the same arguments as you used in training, for example:
+
+python main_ttH.py -u 2.0 -d_mode all -e 300
+python plot_response.py -u 2.0 -d_mode all -e 300
+python plot_train_val_loss.py -u 2.0 -d_mode all -e 300
+python roc_curve.py -u 2.0 -d_mode all -e 300
+
+Be careful with new parameters like -d_mode, because they are not listed in the stored file names yet.
+You can also try to make a scan on any parameters or force to plot all the curves after training by running 
+
+python mu_scan.py
+
+However, you will need to specify the parameters yourself editing mu_scan.py, only a minimal example is left in the final version. 
+
+Save results
+
+All the Plots are saved in the corresponding folder. The most important info about each run is stored in the Results/mu_accuracy.csv
