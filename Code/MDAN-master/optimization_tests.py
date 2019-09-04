@@ -37,17 +37,23 @@ parser.add_argument("-dev", "--device_name", help="Device to use: [cuda|cpu].", 
 parser.add_argument("-u_mode", "--mu_mode", help="Strategy for 'mu': [const|off_disc]", type=str, default='const')
 parser.add_argument("-d_mode", "--d_mode", help="Strategy for discriminator, either pass bkg events from S1 to discriminator or all instances from S1: [bkg_only|all]", type=str, default='bkg_only')
 parser.add_argument("-swap_dom", "--swap_domains", help="If Source and Target domains should be swapped: [True|False]", type=bool, default='False')
-parser.add_argument("-opt", "--opt", help="Choose which optimizer to use: [Adadelta|Adagrad|Nesterov|]", type=str, default='Adadelta')
+#parser.add_argument("-opt", "--opt", help="Choose which optimizer to use: [Adadelta|Adagrad|Nesterov|]", type=str, default='Adadelta')
 # Compile and configure all the model parameters.
 args = parser.parse_args()
 
 N = 10
+args.mu = 2.0
 
-train_val_loss_dict = pickle.load(open("../train_val_loss_dicts/train_val_loss_dict-{}-{}-{}-{}-epochs_{}-mu_{}-l_{}-data_from_{}-opt_{}.pkl".format(args.name, args.frac, args.model, args.mode, args.epoch, args.mu, args.hidden_layers, args.data_from, args.opt), "rb"))
+train_val_loss_dict_Adadelta = pickle.load(open("../train_val_loss_dicts/train_val_loss_dict-{}-{}-{}-{}-epochs_{}-mu_{}-l_{}-data_from_{}-opt_{}.pkl".format(args.name, args.frac, args.model, args.mode, args.epoch, args.mu, args.hidden_layers, args.data_from, 'Adadelta'), "rb"))
+
+train_val_loss_dict_Adagrad = pickle.load(open("../train_val_loss_dicts/train_val_loss_dict-{}-{}-{}-{}-epochs_{}-mu_{}-l_{}-data_from_{}-opt_{}.pkl".format(args.name, args.frac, args.model, args.mode, args.epoch, args.mu, args.hidden_layers, args.data_from, 'Adagrad'), "rb"))
+
+train_val_loss_dict_Nesterov = pickle.load(open("../train_val_loss_dicts/train_val_loss_dict-{}-{}-{}-{}-epochs_{}-mu_{}-l_{}-data_from_{}-opt_{}.pkl".format(args.name, args.frac, args.model, args.mode, args.epoch, args.mu, args.hidden_layers, args.data_from, 'Nesterov'), "rb"))
+
 lw = 2
 plt.rc('font', size=12)  
 fig, ax1 = plt.subplots()
-ax1.set_ylabel('NLL loss')
+#ax1.set_ylabel('NLL loss')
 ax1.set_xlabel('Epochs')
 # {'clf_losses': [], 'discr_losses' : [], 'total_loss_in_epoch': [], 'clf_losses_trg_val': [], 'significance', 'best_setting' : {'best_clf_loss_val': 1e10, 'accuracy': 0, 'epoch': 0} }
 '''if args.mu == 0.0:
@@ -60,28 +66,30 @@ else:
     ax1.plot(train_val_loss_dict[key], label=key)
 '''
 
-train_val_loss_dict['clf_losses'] = np.convolve(train_val_loss_dict['clf_losses'], np.ones((N,))/N, mode='valid')
-ax1.plot(train_val_loss_dict['clf_losses'], label='clf_loss_S_1', color = 'C0', lw = lw, ls = '--')
+#train_val_loss_dict['clf_losses'] = np.convolve(train_val_loss_dict['clf_losses'], np.ones((N,))/N, mode='valid')
+#ax1.plot(train_val_loss_dict['clf_losses'], label='clf_loss_S_1', color = 'C0', lw = lw, ls = '--')
 
-if args.mu != 0.0:
-  train_val_loss_dict['discr_losses'] = np.convolve(train_val_loss_dict['discr_losses'], np.ones((N,))/N, mode='valid')
-  ax1.plot(train_val_loss_dict['discr_losses'], label='discr_loss', color = 'C1', lw = lw, ls = '-.')
+#if args.mu != 0.0:
+#  train_val_loss_dict['discr_losses'] = np.convolve(train_val_loss_dict['discr_losses'], np.ones((N,))/N, mode='valid')
+#  ax1.plot(train_val_loss_dict['discr_losses'], label='discr_loss', color = 'C1', lw = lw, ls = '-.')
 
-train_val_loss_dict['clf_losses_trg_val'] = np.convolve(train_val_loss_dict['clf_losses_trg_val'], np.ones((N,))/N, mode='valid')
-ax1.plot(train_val_loss_dict['clf_losses_trg_val'], label='clf_loss_S_2', color = 'C2', lw = lw, ls = ':')
+#train_val_loss_dict['clf_losses_trg_val'] = np.convolve(train_val_loss_dict['clf_losses_trg_val'], np.ones((N,))/N, mode='valid')
+#ax1.plot(train_val_loss_dict['clf_losses_trg_val'], label='clf_loss_S_2', color = 'C2', lw = lw, ls = ':')
 
-ax2 = ax1.twinx()
-ax2.set_ylabel('Significance', color='red')
-train_val_loss_dict['significance'] = np.convolve(train_val_loss_dict['significance'], np.ones((N,))/N, mode='valid')
-ax2.plot(train_val_loss_dict['significance'], label='significance', color='red', lw = lw)
+#ax2 = ax1.twinx()
+ax1.set_ylabel('Significance')
+train_val_loss_dict_Adadelta['significance'] = np.convolve(train_val_loss_dict_Adadelta['significance'], np.ones((N,))/N, mode='valid')
+ax1.plot(train_val_loss_dict_Adadelta['significance'], label='Adadelta', color='C3', lw = lw)
 
+train_val_loss_dict_Adagrad['significance'] = np.convolve(train_val_loss_dict_Adagrad['significance'], np.ones((N,))/N, mode='valid')
+ax1.plot(train_val_loss_dict_Adagrad['significance'], label='Adagrad', color='C4', lw = lw, ls = '--')
 ax1.legend()
+
+train_val_loss_dict_Nesterov['significance'] = np.convolve(train_val_loss_dict_Nesterov['significance'], np.ones((N,))/N, mode='valid')
+ax1.plot(train_val_loss_dict_Nesterov['significance'], label='Nesterov', color='C5', lw = lw, ls = '-.')
+ax1.legend()
+
 #ax1.set_ylim([0.5, 1.2])
 ax1.set_xlim([0, args.epoch])
-plt.savefig("../../Plots/Training_plots/train_val_loss_plot-epochs_{}-mu_{}-l_{}-data_from_{}-opt_{}.png".format(args.epoch, args.mu, args.hidden_layers, args.data_from, args.opt), dpi = 300)
+plt.savefig("../../Plots/Training_plots/Opt_test-train_val_loss_plot-epochs_{}-mu_{}-l_{}-data_from_{}.png".format(args.epoch, args.mu, args.hidden_layers, args.data_from), dpi = 300)
 plt.show()
-"""
-plt.plot(train_val_loss_dict['clf_losses'], label='clf_losses')
-plt.legend()
-plt.show()
-"""

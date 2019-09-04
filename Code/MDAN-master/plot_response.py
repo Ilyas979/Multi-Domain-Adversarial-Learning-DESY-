@@ -37,11 +37,14 @@ parser.add_argument("-dom", "--data_from", help="Data from domains:[data_src_vs_
 parser.add_argument("-dev", "--device_name", help="Device to use: [cuda|cpu].", type=str, default='cuda') 
 parser.add_argument("-u_mode", "--mu_mode", help="Strategy for 'mu': [const|off_disc]", type=str, default='const')
 parser.add_argument("-d_mode", "--d_mode", help="Strategy for discriminator, either pass bkg events from S1 to discriminator or all instances from S1: [bkg_only|all]", type=str, default='bkg_only')
+parser.add_argument("-swap_dom", "--swap_domains", help="If Source and Target domains should be swapped: [True|False]", type=bool, default='False')
+parser.add_argument("-opt", "--opt", help="Choose which optimizer to use: [Adadelta|Adagrad|Nesterov|]", type=str, default='Adadelta')
+# Compile and configure all the model parameters.
 args = parser.parse_args()
 
 #args.mu = 1.2006896551724138
 
-with open("../pred_scores/pred_scores-{}-{}-{}-{}-epochs_{}-mu_{}-l_{}-data_from_{}.pkl".format(args.name, args.frac, args.model, args.mode, args.epoch, args.mu, args.hidden_layers, args.data_from), "rb") as f:
+with open("../pred_scores/pred_scores-{}-{}-{}-{}-epochs_{}-mu_{}-l_{}-data_from_{}-opt_{}.pkl".format(args.name, args.frac, args.model, args.mode, args.epoch, args.mu, args.hidden_layers, args.data_from, args.opt), "rb") as f:
   y_score_test = pickle.load(f)
   y_test = pickle.load(f)
   y_score_train = pickle.load(f)
@@ -68,7 +71,7 @@ plt.legend(loc='upper right')
 plt.title("Response_NN")
 plt.xlabel('NN response')
 plt.ylabel('dN/N')
-plt.savefig("../../Plots/Response/Response-epochs_{}-mu_{}-l_{}-data_from_{}.png".format(args.epoch, args.mu, args.hidden_layers, args.data_from))
+plt.savefig("../../Plots/Response/Response-epochs_{}-mu_{}-l_{}-data_from_{}-opt_{}.png".format(args.epoch, args.mu, args.hidden_layers, args.data_from, args.opt))
 plt.show()
 plt.close()
 
